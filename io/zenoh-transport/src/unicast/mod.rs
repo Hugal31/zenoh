@@ -145,6 +145,11 @@ impl TransportUnicast {
         }
     }
 
+    #[inline(always)]
+    pub fn is_alive(&self) -> bool {
+        self.get_inner().map(|t| t.is_alive_sync()).unwrap_or(false)
+    }
+
     #[cfg(feature = "stats")]
     pub fn get_stats(&self) -> ZResult<Arc<crate::stats::TransportStats>> {
         Ok(self.get_inner()?.stats())

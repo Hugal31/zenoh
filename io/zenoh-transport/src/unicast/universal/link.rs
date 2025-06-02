@@ -110,6 +110,9 @@ impl TransportLinkUnicastUniversal {
 
             if let Err(e) = res {
                 tracing::debug!("TX task failed: {}", e);
+                tracing::warn!("Sleeping for 10s, go go go!");
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                tracing::warn!("Done sleeping");
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
                 // TODO(yuyuan): do more study to check which ZRuntime should be used or refine the

@@ -117,19 +117,25 @@ impl TransportUnicastUniversal {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
+        // Mark the transport as no longer alive and keep the lock
+        // to avoid concurrent new_transport and closing/closed notifications
+        let a_guard = self.get_alive().await;
+        self.delete_with_lock(a_guard).await
+    }
+
+    async fn delete_with_lock(&self, mut a_guard: AsyncMutexGuard<'_, bool>) -> ZResult<()> {
         tracing::debug!(
             "[{}] Closing transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
         );
 
-        // Mark the transport as no longer alive and keep the lock
-        // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
         *a_guard = false;
         let callback = zwrite!(self.callback).take();
 
         // Delete the transport on the manager
+        // Here we lose the ability to use the transport (and thus the face) again, in
+        // TransportManager::init_transport_unicast.
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close all the links
@@ -139,12 +145,14 @@ impl TransportUnicastUniversal {
             *l_guard = vec![].into_boxed_slice();
             links
         };
+        // This can be very slow (15 minutes) if tx_task is stuck.
         for l in links.drain(..) {
             let _ = l.close().await;
         }
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {
+            // This calls RuntimeSession::closed
             cb.closed();
         }
 
@@ -156,6 +164,8 @@ impl TransportUnicastUniversal {
             Transport,
             Link(Box<TransportLinkUnicastUniversal>),
         }
+
+        let a_guard = zasynclock!(self.alive);
 
         // Try to remove the link
         let target = {
@@ -199,8 +209,12 @@ impl TransportUnicastUniversal {
         }
 
         match target {
-            Target::Transport => self.delete().await,
-            Target::Link(stl) => stl.close().await,
+            Target::Transport => self.delete_with_lock(a_guard).await,
+            Target::Link(stl) => {
+                drop(a_guard);
+                // This can be very slow (15 minutes) if tx_task is stuck.
+                stl.close().await
+            }
         }
     }
 
@@ -317,6 +331,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
         zasynclock!(self.alive)
+    }
+
+    fn is_alive_sync(&self) -> bool {
+        zenoh_runtime::ZRuntime::RX.block_in_place(async { *self.alive.lock().await })
     }
 
     fn get_zid(&self) -> ZenohIdProto {

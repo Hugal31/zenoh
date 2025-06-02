@@ -61,6 +61,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
+    fn is_alive_sync(&self) -> bool;
     fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;

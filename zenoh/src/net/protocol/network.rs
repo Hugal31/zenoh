@@ -464,7 +464,10 @@ impl Network {
         let graph = &self.graph;
 
         // get src link to recover psid<->zid mappings
-        let src_link = match links.values_mut().find(|link| link.zid == src) {
+        let src_link = match links
+            .values_mut()
+            .find(|link| link.zid == src && link.transport.is_alive())
+        {
             Some(link) => link,
             None => {
                 tracing::error!(

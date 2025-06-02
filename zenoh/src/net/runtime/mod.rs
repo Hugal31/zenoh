@@ -455,6 +455,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn closed(&self) {
+        // This is Demux::closed, so Face::send_close.
         self.main_handler.closed();
         Runtime::closed_session(self);
         for handler in &self.slave_handlers {
